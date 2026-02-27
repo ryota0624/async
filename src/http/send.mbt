@@ -15,8 +15,8 @@
 ///|
 priv enum SenderMode {
   SendingHeader
-  WaitingBody(RequestMethod?)
-  SendingBody(RequestMethod?)
+  WaitingBody
+  SendingBody
   PassThrough
 }
 
@@ -83,7 +83,7 @@ impl @io.Writer for Sender with write_once(self, buf, offset~, len~) {
       self.send_len += len
       len
     }
-    WaitingBody(meth) => {
+    WaitingBody => {
       if self.send_len + NON_EMPTY_MESSAGE_HEADER_END.length() >
         self.send_buf.length() {
         self.flush()
@@ -95,10 +95,10 @@ impl @io.Writer for Sender with write_once(self, buf, offset~, len~) {
         NON_EMPTY_MESSAGE_HEADER_END.length(),
       )
       self.send_len += NON_EMPTY_MESSAGE_HEADER_END.length()
-      self.mode = SendingBody(meth)
+      self.mode = SendingBody
       self.write_once(buf, offset~, len~)
     }
-    SendingBody(_) => {
+    SendingBody => {
       // Reserve enough space for chunk length and '\r\n' in the buffer,
       // so that we can commit the whole chunk in a single write to avoid small writes
       if self.send_len + 7 >= self.send_buf.length() {
@@ -137,7 +137,7 @@ impl @io.Writer for Sender with write_reader(self, reader) {
           break
         }
       }
-    WaitingBody(meth) => {
+    WaitingBody => {
       if self.send_len + NON_EMPTY_MESSAGE_HEADER_END.length() >
         self.send_buf.length() {
         self.flush()
@@ -149,10 +149,10 @@ impl @io.Writer for Sender with write_reader(self, reader) {
         NON_EMPTY_MESSAGE_HEADER_END.length(),
       )
       self.send_len += NON_EMPTY_MESSAGE_HEADER_END.length()
-      self.mode = SendingBody(meth)
+      self.mode = SendingBody
       self.write_reader(reader)
     }
-    SendingBody(_) => {
+    SendingBody => {
       self.flush()
       self.send_buf[3] = '\r'
       self.send_buf[4] = '\n'
@@ -181,7 +181,7 @@ async fn Sender::end_body(self : Sender) -> Unit {
   match self.mode {
     SendingHeader | PassThrough =>
       abort("`end_body()` called outside a HTTP message")
-    WaitingBody(_) =>
+    WaitingBody =>
       if self.send_len + EMPTY_MESSAGE_HEADER_END.length() >
         self.send_buf.length() {
         self.flush()
@@ -196,7 +196,7 @@ async fn Sender::end_body(self : Sender) -> Unit {
         self.send_len += EMPTY_MESSAGE_HEADER_END.length()
         self.flush()
       }
-    SendingBody(_) =>
+    SendingBody =>
       if self.send_len + 5 > self.send_buf.length() {
         self.flush()
         self.writer.write("0\r\n\r\n")
@@ -245,7 +245,7 @@ async fn Sender::send_request(
   ..write(" HTTP/1.1\r\n")
   ..write(self.headers)
   .send_headers(extra_headers)
-  self.mode = WaitingBody(Some(meth))
+  self.mode = WaitingBody
 }
 
 ///|
@@ -264,7 +264,7 @@ async fn Sender::send_response(
   ..write("\r\n")
   ..write(self.headers)
   .send_headers(extra_headers)
-  self.mode = WaitingBody(None)
+  self.mode = WaitingBody
 }
 
 ///|
